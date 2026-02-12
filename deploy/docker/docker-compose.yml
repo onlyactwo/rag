@@ -1,0 +1,177 @@
+# RAG 系统 Docker Compose 部署配置
+# 
+# 使用方法:
+# 1. 配置所有 TODO 注释的地方
+# 2. docker-compose up -d
+#
+
+version: '3.8'
+
+services:
+  # MySQL - 业务数据存储
+  mysql:
+    image: mysql:8.0
+    container_name: rag-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme}  # TODO: 修改密码
+      MYSQL_DATABASE: rag_db
+      MYSQL_USER: rag_user
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-changeme}  # TODO: 修改密码
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Redis - 缓存与会话
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Milvus - 向量存储（单机版）
+  milvus-etcd:
+    container_name: rag-milvus-etcd
+    image: quay.io/coreos/etcd:v3.5.5
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - milvus_etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  milvus-minio:
+    container_name: rag-milvus-minio
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9001:9001"
+      - "9000:9000"
+    volumes:
+      - milvus_minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  milvus-standalone:
+    container_name: rag-milvus
+    image: milvusdb/milvus:v2.3.3
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    networks:
+      - rag-network
+    depends_on:
+      - milvus-etcd
+      - milvus-minio
+    restart: unless-stopped
+
+  # API Gateway
+  gateway:
+    image: kuaishou/rag-api-gateway:latest  # TODO: 替换为实际镜像
+    container_name: rag-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - CONSUL_HOST=consul  # TODO: 如果使用Consul，取消注释
+    networks:
+      - rag-network
+    restart: unless-stopped
+
+  # Document Service
+  document-service:
+    image: kuaishou/rag-document-service:latest  # TODO: 替换为实际镜像
+    container_name: rag-document-service
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=rag_db
+      - MYSQL_USER=rag_user
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    networks:
+      - rag-network
+    depends_on:
+      - mysql
+      - redis
+    restart: unless-stopped
+
+  # Vector Service
+  vector-service:
+    image: kuaishou/rag-vector-service:latest  # TODO: 替换为实际镜像
+    container_name: rag-vector-service
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - MILVUS_HOST=milvus-standalone
+      - MILVUS_PORT=19530
+    networks:
+      - rag-network
+    depends_on:
+      - milvus-standalone
+    restart: unless-stopped
+
+  # Query Service
+  query-service:
+    image: kuaishou/rag-query-service:latest  # TODO: 替换为实际镜像
+    container_name: rag-query-service
+    ports:
+      - "8083:8083"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - VECTOR_SERVICE_URL=http://vector-service:8082
+    networks:
+      - rag-network
+    depends_on:
+      - vector-service
+    restart: unless-stopped
+
+  # Consul - 服务发现（可选）
+  # consul:
+  #   image: consul:1.15
+  #   container_name: rag-consul
+  #   ports:
+  #     - "8500:8500"
+  #   networks:
+  #     - rag-network
+  #   restart: unless-stopped
+
+volumes:
+  mysql_data:
+  redis_data:
+  milvus_etcd_data:
+  milvus_minio_data:
+  milvus_data:
+
+networks:
+  rag-network:
+    driver: bridge

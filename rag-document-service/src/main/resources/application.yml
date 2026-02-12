@@ -1,0 +1,118 @@
+# ============================================
+# RAG Document Service Configuration
+# 文档服务 - 负责文档上传、解析、分块、向量化
+# ============================================
+
+server:
+  port: 8081
+
+spring:
+  application:
+    name: rag-document-service
+  
+  # ============================================
+  # MySQL 配置 - 业务数据存储
+  # TODO: 替换为实际数据库连接信息
+  # ============================================
+  datasource:
+    url: jdbc:mysql://localhost:3306/rag_documents?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:password}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  
+  # ============================================
+  # Redis 配置 - 缓存 + 分布式锁
+  # TODO: 替换为实际 Redis 集群地址
+  # ============================================
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+  
+  # ============================================
+  # Kafka 配置 - 异步消息队列
+  # TODO: 替换为实际 Kafka 集群地址
+  # ============================================
+  kafka:
+    bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: rag-document-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.kuaishou.rag.*"
+
+# ============================================
+# Milvus 向量数据库配置
+# TODO: 替换为实际 Milvus 集群地址
+# ============================================
+milvus:
+  host: ${MILVUS_HOST:localhost}
+  port: ${MILVUS_PORT:19530}
+  token: ${MILVUS_TOKEN:}  # 如果使用 RBAC
+  database: rag_knowledge
+  collection:
+    name: document_chunks
+    dimension: 1536  # OpenAI embedding 维度
+    index-type: HNSW
+    metric-type: COSINE
+
+# ============================================
+# MinIO/OSS 对象存储配置
+# TODO: 替换为实际 OSS 配置（快手内部使用 KS3）
+# ============================================
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket-name: rag-documents
+
+# ============================================
+# 嵌入模型服务配置
+# TODO: 替换为实际 Embedding 服务地址
+# ============================================
+embedding:
+  service:
+    url: ${EMBEDDING_SERVICE_URL:http://localhost:8082}
+    timeout: 30000
+    batch-size: 100
+
+# ============================================
+# 日志配置
+# ============================================
+logging:
+  level:
+    com.kuaishou.rag: DEBUG
+    io.milvus: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# ============================================
+# 监控配置
+# ============================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true

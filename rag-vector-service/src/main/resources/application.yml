@@ -1,0 +1,85 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: rag-vector-service
+
+  # TODO: 配置Redis缓存 - 用于查询结果缓存
+  # redis:
+  #   host: ${REDIS_HOST:localhost}
+  #   port: ${REDIS_PORT:6379}
+  #   password: ${REDIS_PASSWORD:}
+  #   database: 0
+  #   timeout: 2000ms
+  #   lettuce:
+  #     pool:
+  #       max-active: 8
+  #       max-idle: 8
+  #       min-idle: 0
+
+# Milvus向量数据库配置
+milvus:
+  # TODO: 配置Milvus连接信息
+  host: ${MILVUS_HOST:localhost}
+  port: ${MILVUS_PORT:19530}
+  username: ${MILVUS_USERNAME:}
+  password: ${MILVUS_PASSWORD:}
+  
+  database: "rag_db"
+  collection: "knowledge_base"
+  
+  connection:
+    pool:
+      max-total: 20
+      max-idle: 10
+      min-idle: 5
+
+# 向量配置
+vector:
+  dimension: 1536  # OpenAI embedding维度
+  # TODO: 根据实际使用的embedding模型调整
+  # OpenAI text-embedding-3-small: 1536
+  # OpenAI text-embedding-3-large: 3072
+  # 通义千问Embedding: 1536
+  
+  index:
+    type: HNSW
+    params:
+      M: 16
+      efConstruction: 200
+  
+  search:
+    ef: 128
+    top-k: 10
+
+# 性能优化配置
+optimization:
+  # TODO: 开启后使用批量查询减少RPC调用
+  batch-search-enabled: true
+  
+  # TODO: 查询缓存配置（依赖Redis）
+  cache:
+    enabled: false  # 改为true时配置Redis
+    ttl: 300  # 缓存5分钟
+
+# 服务注册
+# TODO: 配置Consul/Nacos服务发现
+# consul:
+#   host: ${CONSUL_HOST:localhost}
+#   port: ${CONSUL_PORT:8500}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    com.kuaishou.rag.vector: INFO
+    io.milvus: WARN

@@ -1,0 +1,95 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rag-api-gateway
+  
+  # ============================================
+  # TODO: [中间件配置] Redis - 限流和缓存
+  # 请配置实际的 Redis 地址和密码
+  # ============================================
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}  # 生产环境必须设置密码
+    database: 0
+    timeout: 2000ms
+    lettuce:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+
+  # ============================================
+  # TODO: [中间件配置] Nacos - 服务注册与发现
+  # 请配置实际的 Nacos 服务器地址
+  # ============================================
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:rag-dev}
+        group: RAG_GROUP
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+        namespace: ${NACOS_NAMESPACE:rag-dev}
+        group: RAG_GROUP
+        file-extension: yml
+
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        # 文档服务路由
+        - id: document-service
+          uri: lb://rag-document-service
+          predicates:
+            - Path=/api/v1/documents/**
+          filters:
+            - StripPrefix=0
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@ipKeyResolver}"
+
+        # 查询服务路由
+        - id: query-service
+          uri: lb://rag-query-service
+          predicates:
+            - Path=/api/v1/query/**
+          filters:
+            - StripPrefix=0
+
+        # 向量存储服务路由
+        - id: vector-service
+          uri: lb://rag-vector-service
+          predicates:
+            - Path=/api/v1/vector/**
+          filters:
+            - StripPrefix=0
+
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+
+# ============================================
+# TODO: [中间件配置] Sentinel - 熔断限流
+# 请配置实际的 Sentinel Dashboard 地址
+# ============================================
+sentinel:
+  transport:
+    dashboard: ${SENTINEL_DASHBOARD:localhost:8858}
+  eager: true
+
+# 日志配置
+logging:
+  level:
+    com.kuaishou.rag.gateway: INFO
+    org.springframework.cloud.gateway: DEBUG

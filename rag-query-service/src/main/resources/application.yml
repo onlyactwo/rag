@@ -1,0 +1,58 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: rag-query-service
+  
+  # ============================================
+  # 【中间件】Redis - 缓存热门查询结果
+  # TODO: 配置 Redis 连接信息
+  # 用途：1) 缓存相似查询 2) 限流计数 3) 会话存储
+  # ============================================
+  # redis:
+  #   host: ${REDIS_HOST:localhost}
+  #   port: ${REDIS_PORT:6379}
+  #   password: ${REDIS_PASSWORD:}
+  #   database: 0
+  #   lettuce:
+  #     pool:
+  #       max-active: 8
+  #       max-idle: 8
+
+# ============================================
+# 【中间件】向量服务调用配置
+# TODO: 配置向量服务地址
+# ============================================
+vector:
+  service:
+    url: ${VECTOR_SERVICE_URL:http://rag-vector-service:8082}
+    timeout: 5000
+
+# ============================================
+# 【中间件】LLM 服务配置
+# TODO: 配置大模型 API
+# 支持：OpenAI / Claude / 文心一言 / 通义千问
+# ============================================
+llm:
+  provider: ${LLM_PROVIDER:openai}  # openai, claude, qianwen
+  openai:
+    api-key: ${OPENAI_API_KEY:}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com/v1}
+    model: gpt-4o-mini
+    temperature: 0.7
+    max-tokens: 2000
+
+# ============================================
+# 【中间件】Kafka - 异步处理查询日志
+# TODO: 配置 Kafka 用于查询分析
+# ============================================
+# kafka:
+#   bootstrap-servers: ${KAFKA_SERVERS:localhost:9092}
+#   producer:
+#     key-serializer: org.apache.kafka.common.serialization.StringSerializer
+#     value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+logging:
+  level:
+    com.kuaishou.rag.query: DEBUG
